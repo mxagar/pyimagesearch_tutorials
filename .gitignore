@@ -1,0 +1,14 @@
+# OS
+.DS_Store
+
+# IDEs
+.vscode
+
+# Python
+__pycache__
+.ipynb_checkpoints
+
+# Additional
+computer_vision_udacity
+deep_learning_udacity
+detection_segmentation_pytorch
