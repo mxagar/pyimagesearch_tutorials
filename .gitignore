@@ -12,3 +12,7 @@ __pycache__
 computer_vision_udacity
 deep_learning_udacity
 detection_segmentation_pytorch
+dataset
+data
+*.pth
+*.pickle
