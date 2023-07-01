@@ -16,3 +16,5 @@ dataset
 data
 *.pth
 *.pickle
+ocr_guide
+deep-learning-v2-pytorch
