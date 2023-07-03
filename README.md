@@ -23,7 +23,8 @@ In addition to these tutorials, I have the following repositories with related c
 
 TBD.
 
-- Building Image Pairs for Siamese Networks 
+- Building Image Pairs for Siamese Networks
+- Implementing Your First Siamese Network with Keras and TensorFlow
 - Comparing Images for Similarity with Siamese Networks
 - Improving Accuracy with Contrastive Loss
 - Face Recognition with Siamese Networks, Keras, and TensorFlow
