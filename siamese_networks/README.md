@@ -1,24 +1,28 @@
 # Siamese Networks
 
-This folder contains examples related to Siamese Networks and Contrastive Learning using Pytorch and Tensorflow.
+This folder contains examples related to **Siamese Networks and Contrastive Learning** using Pytorch and Tensorflow.
 
 Most of the examples were obtained from the [PyImageSearch](https://pyimagesearch.com/) website:
 
-- Building Image Pairs for Siamese Networks 
-- Comparing Images for Similarity with Siamese Networks
-- Improving Accuracy with Contrastive Loss
-- Face Recognition with Siamese Networks, Keras, and TensorFlow
-- Building a Dataset for Triplet Loss with Keras and TensorFlow
-- Triplet Loss with Keras and TensorFlow
-- Training and Making Predictions with Siamese Networks and Triplet Loss
+- Building Image Pairs for Siamese Networks (PyImageSearch)
+- Implementing Your First Siamese Network with Keras and TensorFlow (PyImageSearch)
+- Comparing Images for Similarity with Siamese Networks (PyImageSearch)
+- Improving Accuracy with Contrastive Loss (PyImageSearch)
+- Face Recognition with Siamese Networks, Keras, and TensorFlow (PyImageSearch)
+- Building a Dataset for Triplet Loss with Keras and TensorFlow (PyImageSearch)
+- Triplet Loss with Keras and TensorFlow (PyImageSearch)
+- Training and Making Predictions with Siamese Networks and Triplet Loss (PyImageSearch)
 
 Table of contents:
 
 - [Siamese Networks](#siamese-networks)
-  - [Set Up: Environment, GPU, etc.](#set-up-environment-gpu-etc)
+  - [0. Set Up: Environment, GPU, etc.](#0-set-up-environment-gpu-etc)
+  - [1. Introduction to Siamese Networks and Contrastive Learning](#1-introduction-to-siamese-networks-and-contrastive-learning)
+  - [2. Building Image Pairs for Siamese Networks (PyImageSearch)](#2-building-image-pairs-for-siamese-networks-pyimagesearch)
+  - [3. Implementing Your First Siamese Network with Keras and TensorFlow (PyImageSearch)](#3-implementing-your-first-siamese-network-with-keras-and-tensorflow-pyimagesearch)
 
 
-## Set Up: Environment, GPU, etc.
+## 0. Set Up: Environment, GPU, etc.
 
 Check the GPU usage - RAM and GPU processors:
 	
@@ -122,4 +126,188 @@ device_lib.list_local_devices()
 #  incarnation: 7880903414775673565
 #  xla_global_id: -1]
 ```
+
+## 1. Introduction to Siamese Networks and Contrastive Learning
+
+Siamese are twins merged together. In Siamese Networks, we have usually two networks in parallel and they are aranged as follows:
+
+- Both networks have the same model/architecture.
+- We feed one image to one network and another to the second network.
+- The output of each network is usually a feature vector.
+- The two feature vectors are compared, usually with a similarity metric, but we could use a binary cross-entropy metric, too; the similarity measurement is related to the cost function:
+  - if the two images are different, the similarity should be low;
+  - if both images belong to the same class, the similarity should be high.
+- Instead of a pure similarity metric, we could use a distance metric together with the sigmoid activation.
+- During training, weight update happends in both networks! That is, we end up having the same weights for both parallel/sister networks; in other words, both networks have shared weights.
+
+![Siamese Networks](./assets/keras_siamese_networks_process.png)
+
+Example network, SigNet, which is used to detect whether a signature is real or not:
+
+[SigNet: Convolutional Siamese Network for Writer Independent Offline Signature Verification, Dey et al.](https://arxiv.org/pdf/1707.02131.pdf)
+
+The SigNet network is the following:
+
+![SigNet Architecture: Siamese Network](./assets/siamese_image_pairs_signet.png)
+
+As we see, we input 2 images: a reference image and a second image which we'd like to determine whether it's real or fake given the reference signature. Since the trained network is able to compute the similarity/distance of the feature vectors, we can determine the veracity of the second signature.
+
+Some applications of Siamese Networks:
+
+- Anti spoofing.
+- Feature vector generation, so that similar images have vectors close to each other.
+- Clustering (following the previous application).
+- Face recognition (which happens after the face detection).
+
+To work with Siamese Networks, we need to generated either **image pairs** or **image triplets**.
+
+In the case of image pairs:
+
+- We have **positive pairs**: pairs of images which belong to the same type/class: same person face, same person signature, same digit.
+- We have **negative pairs**: pairs of images which belong to different type/class.
+
+In the case of image triplets:
+
+- There is an **anchor** image, which is the ground truth.
+- A **positive image**: same class as the anchor.
+- A **negative image**: different class as the anchor.
+
+With triplets, the goal is to improve the feature vector generation so that the similarity between the anchor-positive pair is larger than between the anchor-negative pair.
+
+We can generate positive pairs by using data augmentation for an image.
+
+## 2. Building Image Pairs for Siamese Networks (PyImageSearch)
+
+Links:
+
+- Tutorial: [Building image pairs for siamese networks with Python](https://pyimagesearch.com/2020/11/23/building-image-pairs-for-siamese-networks-with-python/?_ga=2.224851610.1290695422.1688376799-1020982194.1685524223)
+- [Google Colab Notebook](https://colab.research.google.com/drive/1_AZ1MoaoNzKsw7GgHi9brxlxw84GFpnV?usp=sharing)
+- [Source code](https://pyimagesearch-code-downloads.s3-us-west-2.amazonaws.com/siamese-image-pairs/siamese-image-pairs.zip)
+- Local/repo notebook: [`siamese_image_pairs.ipynb`](./01_siamese-image-pairs/siamese_image_pairs.ipynb)
+
+In the notebook/code, the MNIST dataset is loaded and poistive/negative image pairs (with their label) are built and visualized.
+
+![MNIST Siamese Image Pairs](./assets/siamese_image_pairs_signet.png)
+
+```python
+# import the necessary packages
+from tensorflow.keras.datasets import mnist
+from imutils import build_montages
+import matplotlib.pyplot as plt
+import numpy as np
+import cv2
+
+def plt_imshow(title, image):
+	# convert the image frame BGR to RGB color space and display it
+	plt.figure(figsize=(12, 12))
+	image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+	plt.imshow(image)
+	plt.title(title)
+	plt.grid(False)
+	plt.show()
+
+def make_pairs(images, labels):
+	# initialize two empty lists to hold the (image, image) pairs and
+	# labels to indicate if a pair is positive or negative
+	pairImages = [] # [[im1, im2], [im3, im4], ...]
+	pairLabels = [] # [[0], [1]] 0: negative, 1: positive
+
+	# calculate the total number of classes present in the dataset
+	# and then build a list of indexes for each class label that
+	# provides the indexes for all examples with a given label
+    # -> for each label/class, all image indices of that class
+	numClasses = len(np.unique(labels))
+	idx = [np.where(labels == i)[0] for i in range(0, numClasses)]
+
+	# loop over all images
+	for idxA in range(len(images)):
+		# grab the current image and label belonging to the current
+		# iteration
+		currentImage = images[idxA]
+		label = labels[idxA]
+
+		# randomly pick an image that belongs to the *same* class
+		# label
+		idxB = np.random.choice(idx[label])
+		posImage = images[idxB]
+
+		# prepare a positive pair and update the images and labels
+		# lists, respectively
+		pairImages.append([currentImage, posImage])
+		pairLabels.append([1])
+
+		# grab the indices for each of the class labels *not* equal to
+		# the current label and randomly pick an image corresponding
+		# to a label *not* equal to the current label
+		negIdx = np.where(labels != label)[0]
+		negImage = images[np.random.choice(negIdx)]
+
+		# prepare a negative pair of images and update our lists
+		pairImages.append([currentImage, negImage])
+		pairLabels.append([0])
+
+	# return a 2-tuple of our image pairs and labels
+	return (np.array(pairImages), np.array(pairLabels))
+
+# load MNIST dataset and scale the pixel values to the range of [0, 1]
+print("[INFO] loading MNIST dataset...")
+(trainX, trainY), (testX, testY) = mnist.load_data()
+
+# build the positive and negative image pairs
+print("[INFO] preparing positive and negative pairs...")
+(pairTrain, labelTrain) = make_pairs(trainX, trainY)
+(pairTest, labelTest) = make_pairs(testX, testY)
+
+# initialize the list of images that will be used when building our
+# montage
+images = []
+
+# loop over a sample of our training pairs
+for i in np.random.choice(np.arange(0, len(pairTrain)), size=(49,)):
+	# grab the current image pair and label
+	imageA = pairTrain[i][0]
+	imageB = pairTrain[i][1]
+	label = labelTrain[i]
+
+	# to make it easier to visualize the pairs and their positive or
+	# negative annotations, we're going to "pad" the pair with four
+	# pixels along the top, bottom, and right borders, respectively
+	output = np.zeros((36, 60), dtype="uint8")
+	pair = np.hstack([imageA, imageB])
+	output[4:32, 0:56] = pair
+
+	# set the text label for the pair along with what color we are
+	# going to draw the pair in (green for a "positive" pair and
+	# red for a "negative" pair)
+	text = "neg" if label[0] == 0 else "pos"
+	color = (0, 0, 255) if label[0] == 0 else (0, 255, 0)
+
+	# create a 3-channel RGB image from the grayscale pair, resize
+	# it from 28x28 to 96x51 (so we can better see it), and then
+	# draw what type of pair it is on the image
+	vis = cv2.merge([output] * 3)
+	vis = cv2.resize(vis, (96, 51), interpolation=cv2.INTER_LINEAR)
+	cv2.putText(vis, text, (2, 12), cv2.FONT_HERSHEY_SIMPLEX, 0.75,
+		color, 2)
+
+	# add the pair visualization to our list of output images
+	images.append(vis)
+
+# construct the montage for the images
+montage = build_montages(images, (96, 51), (7, 7))[0]
+
+# show the output montage
+plt_imshow("Siamese Image Pairs", montage)
+```
+
+## 3. Implementing Your First Siamese Network with Keras and TensorFlow (PyImageSearch)
+
+Links:
+
+- Tutorial: [Siamese networks with Keras, TensorFlow, and Deep Learning](https://pyimagesearch.com/2020/11/30/siamese-networks-with-keras-tensorflow-and-deep-learning/?_ga=2.190651691.1290695422.1688376799-1020982194.1685524223)
+- [Google Colab Notebook](https://colab.research.google.com/drive/143_LIaI-wWVQIgw93gQVU9NCcgWBRFNZ?usp=sharing)
+- [Source code](https://pyimagesearch-code-downloads.s3-us-west-2.amazonaws.com/keras-siamese-networks/keras-siamese-networks.zip)
+- Local/repo notebook: [`keras_siamese_networks.ipynb`](./02_keras-siamese-networks/keras_siamese_networks.ipynb)
+
+
 
