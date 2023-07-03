@@ -1,0 +1,37 @@
+name: siam
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  - requests
+  - jupyter
+  - jupyterlab
+  - scikit-learn
+  - scipy
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - cython
+  - nltk
+  - numba
+  - pillow
+  - pip:
+      - protobuf
+      - opencv-python
+      - opencv-contrib-python
+      - onnx>=1.9.0
+      #- onnxruntime
+      - onnxruntime-gpu
+      - onnx-simplifier>=0.3.6
+      - tensorflow
+      - keras
+      - wandb
+      - autopep8
+      - joblib
+      - pytest
+      - setuptools
+      - wheel
+      - imutils
