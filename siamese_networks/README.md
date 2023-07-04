@@ -4,34 +4,40 @@ This folder contains examples related to **Siamese Networks and Contrastive Lear
 
 Most of the examples were obtained from the [PyImageSearch](https://pyimagesearch.com/) website:
 
-Part I: MNIST with Tensorflow / Keras
+Part I: MNIST with Tensorflow / Keras (PyImageSearch)
 
 - Building Image Pairs for Siamese Networks (PyImageSearch / Tensorflow)
 - Implementing Your First Siamese Network with Keras and TensorFlow (PyImageSearch / Tensorflow)
 - Comparing Images for Similarity with Siamese Networks (PyImageSearch / Tensorflow)
 - **Improving Accuracy with Contrastive Loss (PyImageSearch / Tensorflow)**
 
-Part II: X
-
-- A
-- B
-
-Part III: X
+Part II: Face Recognition with Tensorflow / Keras (PyImageSearch)
 
 - Face Recognition with Siamese Networks, Keras, and TensorFlow (PyImageSearch / Tensorflow)
 - Building a Dataset for Triplet Loss with Keras and TensorFlow (PyImageSearch / Tensorflow)
 - Triplet Loss with Keras and TensorFlow (PyImageSearch / Tensorflow)
 - Training and Making Predictions with Siamese Networks and Triplet Loss (PyImageSearch / Tensorflow)
 
+However, some topics are not from [PyImageSearch](https://pyimagesearch.com/):
+
+- MNIST with Pytorch
+- CIFAR with Pytorch
+- SigNet with Pytorch
+
 Table of contents:
 
 - [Siamese Networks](#siamese-networks)
 	- [0. Set Up: Environment, GPU, etc.](#0-set-up-environment-gpu-etc)
 	- [1. Introduction to Siamese Networks and Contrastive Learning](#1-introduction-to-siamese-networks-and-contrastive-learning)
+		- [Contrastive Loss](#contrastive-loss)
+		- [Classification vs. Verification vs. Identification](#classification-vs-verification-vs-identification)
+		- [Triplet Loss](#triplet-loss)
 	- [2. Building Image Pairs for Siamese Networks (PyImageSearch)](#2-building-image-pairs-for-siamese-networks-pyimagesearch)
 	- [3. Implementing Your First Siamese Network with Keras and TensorFlow (PyImageSearch)](#3-implementing-your-first-siamese-network-with-keras-and-tensorflow-pyimagesearch)
 	- [4. Comparing Images for Similarity with Siamese Networks (PyImageSearch)](#4-comparing-images-for-similarity-with-siamese-networks-pyimagesearch)
 	- [5. Improving Accuracy with Contrastive Loss (PyImageSearch / Tensorflow)](#5-improving-accuracy-with-contrastive-loss-pyimagesearch--tensorflow)
+	- [6. Face Recognition with Siamese Networks, Keras, and TensorFlow (PyImageSearch / Tensorflow)](#6-face-recognition-with-siamese-networks-keras-and-tensorflow-pyimagesearch--tensorflow)
+	- [7. Building a Dataset for Triplet Loss with Keras and TensorFlow (PyImageSearch / Tensorflow)](#7-building-a-dataset-for-triplet-loss-with-keras-and-tensorflow-pyimagesearch--tensorflow)
 
 
 ## 0. Set Up: Environment, GPU, etc.
@@ -141,15 +147,19 @@ device_lib.list_local_devices()
 
 ## 1. Introduction to Siamese Networks and Contrastive Learning
 
-Siamese are twins merged together. In Siamese Networks, we have usually two networks in parallel and they are aranged as follows:
+In contrastive learning, images or inputs are projected to a lower dimensional space in such a way that similar instances (i.e., instances with semantically related attributes) are pulled together while different instances are pushed away from each other.
+
+![Contrastive Learning (PyImageSearch)](./assets/contrastive_learning.png)
+
+Siamese Networks are the architecture to achieve such learning. Siamese are twins merged together. In Siamese Networks, we have usually two networks in parallel and they are aranged as follows:
 
 - Both networks have the same model/architecture.
 - We feed one image to one network and another to the second network.
 - The output of each network is usually a feature vector.
-- The two feature vectors are compared, usually with a similarity metric, but we could use a binary cross-entropy metric, too; the similarity measurement is related to the cost function:
+- The two feature vectors are compared, usually with a similarity metric (or the Euclidean distance); the similarity measurement is related to the cost function:
   - if the two images are different, the similarity should be low;
   - if both images belong to the same class, the similarity should be high.
-- Instead of a pure similarity metric, we could use a distance metric together with the sigmoid activation.
+- As the loss function, we could take the binary cross-entropy: we pass the similarity metric through a sigmoid and then use the cross-entropy formula; however, there are more robust loss functions for this kind of networks, such as the **contrastive loss**, explained below.
 - During training, weight update happends in both networks! That is, we end up having the same weights for both parallel/sister networks; in other words, both networks have shared weights.
 
 ![Siamese Networks](./assets/keras_siamese_networks_process.png)
@@ -187,6 +197,44 @@ In the case of image triplets:
 With triplets, the goal is to improve the feature vector generation so that the similarity between the anchor-positive pair is larger than between the anchor-negative pair.
 
 We can generate positive pairs by using data augmentation for an image.
+
+### Contrastive Loss
+
+A common loss used in Siamese Networks is the **contrastive loss** which improves the binary cross entropy loss for this kind of architectures. In reality, the formula of the contrastive loss is ver similar to the binary cross-entropy:
+
+- Both positive and negative image pairs are considered.
+- The distance `D` or `D_w` is sumtiplied to each term, to scale it with the Euclidean distance between the vectors.
+- We also use a `margin` hyperparameter, which adds an offset to the distance; it is often set to be 1, but we might need to tune it. The margin value represents the minimum distance between different images, i.e., images from different classes (negative pair).
+- There is no sigmoid now: the model output is the Euclidean distance itself.
+
+![Binary Cross-Entropy](./assets/contrastive_loss_keras_binary_crossentropy.png)
+
+![Contrastive Loss](./assets/contrastive_loss_keras_constrastive_loss_function_updated.png)
+
+Note that if we used binary cross-entropy, we'd need to add a sigmoid to the Euclidean distance computation. However, with contrastive loss, we don't use any sigmoids. Thus, we also need to figure out a threshold to determine whether two images belog to the same class. We can evaluate that threshold experimentally by observing the distribution of the positive and negative pairs, i.e., the distribution of their Euclidean distances. Something similar is done with anomaly detection.
+
+### Classification vs. Verification vs. Identification
+
+Source: [Face Recognition with Siamese Networks, Keras, and TensorFlow](https://pyimagesearch.com/2023/01/09/face-recognition-with-siamese-networks-keras-and-tensorflow/?_ga=2.192224554.1290695422.1688376799-1020982194.1685524223).
+
+Siamese Networks are usually more robust to changes in the attributes of a specific object than classification networks. Thus, they might be better suited for identification or recognition tasks.
+
+We need to distinguish:
+
+- Detection: i.e., detect/locate where the face is, and crop the image.
+- Recognition: it receives a detected face and it can perform
+  - Identification: i.e., classification; we have a fixed set of faces and we need to identify to which one our image belongs. The problem with these networks is that it is very difficult to add new classes without retraining the network.
+  - Verification: i.e., similarity measure; we don't have a fixed set of classes, instead we compute feature vectors and compare them. The CNN is a feature (vector) extractor. Based on a threshold, we decide whether a particular image belongs to the same class as a reference image. This models can be used as classificators, too, but we need to evaluate N times with N reference images a target image to classify it.
+
+![Verification (PyImageSearch)](./assets/verification_1.png)
+
+![Verification for Classification (PyImageSearch)](./assets/verification_5.png)
+
+### Triplet Loss
+
+Source: [Building a Dataset for Triplet Loss with Keras and TensorFlow](https://pyimagesearch.com/2023/02/13/building-a-dataset-for-triplet-loss-with-keras-and-tensorflow/?_ga=2.225440282.1290695422.1688376799-1020982194.1685524223).
+
+
 
 ## 2. Building Image Pairs for Siamese Networks (PyImageSearch)
 
@@ -919,3 +967,20 @@ for (i, (pathA, pathB)) in enumerate(pairs):
 	plt.show()
 
 ```
+
+## 6. Face Recognition with Siamese Networks, Keras, and TensorFlow (PyImageSearch / Tensorflow)
+
+This tutorial has no code/notebook, it's just theory.
+
+The content is summarized in the section [Introduction to Siamese Networks and Contrastive Learning](#1-introduction-to-siamese-networks-and-contrastive-learning).
+
+## 7. Building a Dataset for Triplet Loss with Keras and TensorFlow (PyImageSearch / Tensorflow)
+
+Links:
+
+- Tutorial: [Building a Dataset for Triplet Loss with Keras and TensorFlow](https://pyimagesearch.com/2023/02/13/building-a-dataset-for-triplet-loss-with-keras-and-tensorflow/?_ga=2.225440282.1290695422.1688376799-1020982194.1685524223)
+- [Google Colab Notebook](https://colab.research.google.com/drive/10zpbE6cMEEzws-fkR_88Cb_X5OsMD1Za?usp=sharing)
+- [Source code](https://pyimagesearch-code-downloads.s3-us-west-2.amazonaws.com/contrastive-loss-keras/contrastive-loss-keras.zip)
+- Local/repo notebook: [`contrastive_loss_keras.ipynb`](./04_contrastive-loss-keras/contrastive_loss_keras.ipynb)
+
+
