@@ -190,7 +190,7 @@ In the case of image pairs:
 
 In the case of image triplets:
 
-- There is an **anchor** image, which is the ground truth.
+- There is an **anchor** image, which is the ground truth or the reference image.
 - A **positive image**: same class as the anchor.
 - A **negative image**: different class as the anchor.
 
@@ -200,7 +200,7 @@ We can generate positive pairs by using data augmentation for an image.
 
 ### Contrastive Loss
 
-A common loss used in Siamese Networks is the **contrastive loss** which improves the binary cross entropy loss for this kind of architectures. In reality, the formula of the contrastive loss is ver similar to the binary cross-entropy:
+A common loss used in Siamese Networks with image pairs is the **contrastive loss**, which improves the binary cross entropy loss for this kind of architectures. In reality, the formula of the contrastive loss is ver similar to the binary cross-entropy:
 
 - Both positive and negative image pairs are considered.
 - The distance `D` or `D_w` is sumtiplied to each term, to scale it with the Euclidean distance between the vectors.
@@ -233,6 +233,16 @@ We need to distinguish:
 ### Triplet Loss
 
 Source: [Building a Dataset for Triplet Loss with Keras and TensorFlow](https://pyimagesearch.com/2023/02/13/building-a-dataset-for-triplet-loss-with-keras-and-tensorflow/?_ga=2.225440282.1290695422.1688376799-1020982194.1685524223).
+
+If we are working with image triplets, we usually apply the **triplet loss**. Recall that in image triplets we have:
+
+- An **anchor** image, which is the ground truth or the reference image.
+- A **positive image**: same class as the anchor.
+- A **negative image**: different class as the anchor.
+
+![Image Triplet](./assets/image_triplet_jlo.png)
+
+The idea is that we are trying to create an embedding space in which the anchor and the positive image are close to each other, whereas the anchor and the negative image are far from each other.
 
 
 
@@ -978,9 +988,10 @@ The content is summarized in the section [Introduction to Siamese Networks and C
 
 Links:
 
-- Tutorial: [Building a Dataset for Triplet Loss with Keras and TensorFlow](https://pyimagesearch.com/2023/02/13/building-a-dataset-for-triplet-loss-with-keras-and-tensorflow/?_ga=2.225440282.1290695422.1688376799-1020982194.1685524223)
-- [Google Colab Notebook](https://colab.research.google.com/drive/10zpbE6cMEEzws-fkR_88Cb_X5OsMD1Za?usp=sharing)
-- [Source code](https://pyimagesearch-code-downloads.s3-us-west-2.amazonaws.com/contrastive-loss-keras/contrastive-loss-keras.zip)
-- Local/repo notebook: [`contrastive_loss_keras.ipynb`](./04_contrastive-loss-keras/contrastive_loss_keras.ipynb)
+- Tutorial: [Building a Dataset for Triplet Loss with Keras and TensorFlow](https://www.pyimagesearch.com/2023/02/13/building-a-dataset-for-triplet-loss-with-keras-and-tensorflow/?_ga=2.31323071.1290695422.1688376799-1020982194.1685524223)
+- [Google Colab Notebook](https://colab.research.google.com/drive/1gjRMAluKyz2lsJpK5O62pYQiXX1iIn60?usp=sharing)
+- [Source code](https://pyimagesearch-code-downloads.s3-us-west-2.amazonaws.com/siamese-201/siamese-201.zip)
+- Local/repo notebook: [`siamese_data_building.ipynb`](./05_face_recognition_siamese_201/siamese_data_building.ipynb)
+
 
 
