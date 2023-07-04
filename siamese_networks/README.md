@@ -4,22 +4,24 @@ This folder contains examples related to **Siamese Networks and Contrastive Lear
 
 Most of the examples were obtained from the [PyImageSearch](https://pyimagesearch.com/) website:
 
-- Building Image Pairs for Siamese Networks (PyImageSearch)
-- Implementing Your First Siamese Network with Keras and TensorFlow (PyImageSearch)
-- Comparing Images for Similarity with Siamese Networks (PyImageSearch)
-- Improving Accuracy with Contrastive Loss (PyImageSearch)
-- Face Recognition with Siamese Networks, Keras, and TensorFlow (PyImageSearch)
-- Building a Dataset for Triplet Loss with Keras and TensorFlow (PyImageSearch)
-- Triplet Loss with Keras and TensorFlow (PyImageSearch)
-- Training and Making Predictions with Siamese Networks and Triplet Loss (PyImageSearch)
+- Building Image Pairs for Siamese Networks (PyImageSearch / Tensorflow)
+- Implementing Your First Siamese Network with Keras and TensorFlow (PyImageSearch / Tensorflow)
+- Comparing Images for Similarity with Siamese Networks (PyImageSearch / Tensorflow)
+- Improving Accuracy with Contrastive Loss (PyImageSearch / Tensorflow)
+- Face Recognition with Siamese Networks, Keras, and TensorFlow (PyImageSearch / Tensorflow)
+- Building a Dataset for Triplet Loss with Keras and TensorFlow (PyImageSearch / Tensorflow)
+- Triplet Loss with Keras and TensorFlow (PyImageSearch / Tensorflow)
+- Training and Making Predictions with Siamese Networks and Triplet Loss (PyImageSearch / Tensorflow)
 
 Table of contents:
 
 - [Siamese Networks](#siamese-networks)
-  - [0. Set Up: Environment, GPU, etc.](#0-set-up-environment-gpu-etc)
-  - [1. Introduction to Siamese Networks and Contrastive Learning](#1-introduction-to-siamese-networks-and-contrastive-learning)
-  - [2. Building Image Pairs for Siamese Networks (PyImageSearch)](#2-building-image-pairs-for-siamese-networks-pyimagesearch)
-  - [3. Implementing Your First Siamese Network with Keras and TensorFlow (PyImageSearch)](#3-implementing-your-first-siamese-network-with-keras-and-tensorflow-pyimagesearch)
+	- [0. Set Up: Environment, GPU, etc.](#0-set-up-environment-gpu-etc)
+	- [1. Introduction to Siamese Networks and Contrastive Learning](#1-introduction-to-siamese-networks-and-contrastive-learning)
+	- [2. Building Image Pairs for Siamese Networks (PyImageSearch)](#2-building-image-pairs-for-siamese-networks-pyimagesearch)
+	- [3. Implementing Your First Siamese Network with Keras and TensorFlow (PyImageSearch)](#3-implementing-your-first-siamese-network-with-keras-and-tensorflow-pyimagesearch)
+	- [4. Comparing Images for Similarity with Siamese Networks (PyImageSearch)](#4-comparing-images-for-similarity-with-siamese-networks-pyimagesearch)
+	- [5. Improving Accuracy with Contrastive Loss (PyImageSearch / Tensorflow)](#5-improving-accuracy-with-contrastive-loss-pyimagesearch--tensorflow)
 
 
 ## 0. Set Up: Environment, GPU, etc.
@@ -309,5 +311,317 @@ Links:
 - [Source code](https://pyimagesearch-code-downloads.s3-us-west-2.amazonaws.com/keras-siamese-networks/keras-siamese-networks.zip)
 - Local/repo notebook: [`keras_siamese_networks.ipynb`](./02_keras-siamese-networks/keras_siamese_networks.ipynb)
 
+In this project a Siamese Network is defined and trained using Tensorflow/Keras. The used dataset is MNIST.
+The trained model (weights) is saved to disk. Summary of steps:
 
+- Config dictionary
+- Image pairs are created
+- Euclidean distance function
+- Siamese network is built:
+  - No Sequential API is used, but the Functional API
+  - `Lambda(euclidean_distance)` for the feature vectors of the images
+  - The comparison after the `Lambda` is passed to a `Dense(1)` with the `sigmoid` activation
+  - The output of the sigmoid is evaluated in a binary cross-entropy loss function; usually, more sophisticated or specific loss functions are used, but for a simple example as the MNIST case, it's fine to use binary cross-entropy.
+
+```python
+# import the necessary packages
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input
+from tensorflow.keras.layers import Lambda
+from tensorflow.keras.layers import Conv2D
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Dropout
+from tensorflow.keras.layers import GlobalAveragePooling2D
+from tensorflow.keras.layers import MaxPooling2D
+from tensorflow.keras.datasets import mnist
+import tensorflow.keras.backend as K
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+
+
+class Config:
+    # specify the shape of the inputs for our network
+    # in our case, we'll use MNIST, so it's 28x28
+    IMG_SHAPE = (28, 28, 1)
+
+    # specify the batch size and number of epochs
+    BATCH_SIZE = 64
+    # Siamese Networks require 100s of epochs
+    EPOCHS = 20 # 100
+
+    # define the path to the base output directory
+    BASE_OUTPUT = "output"
+
+    # use the base output path to derive the path to the serialized
+    # model along with training history plot
+    MODEL_PATH = os.path.sep.join([BASE_OUTPUT, "siamese_model"])
+    PLOT_PATH = os.path.sep.join([BASE_OUTPUT, "plot.png"])
+
+# instantiate the config class
+config = Config()
+
+
+def make_pairs(images, labels):
+	# initialize two empty lists to hold the (image, image) pairs and
+	# labels to indicate if a pair is positive or negative
+	pairImages = []
+	pairLabels = []
+
+	# calculate the total number of classes present in the dataset
+	# and then build a list of indexes for each class label that
+	# provides the indexes for all examples with a given label
+	numClasses = len(np.unique(labels))
+	idx = [np.where(labels == i)[0] for i in range(0, numClasses)]
+
+	# loop over all images
+	for idxA in range(len(images)):
+		# grab the current image and label belonging to the current
+		# iteration
+		currentImage = images[idxA]
+		label = labels[idxA]
+
+		# randomly pick an image that belongs to the *same* class
+		# label
+		idxB = np.random.choice(idx[label])
+		posImage = images[idxB]
+
+		# prepare a positive pair and update the images and labels
+		# lists, respectively
+		pairImages.append([currentImage, posImage])
+		pairLabels.append([1])
+
+		# grab the indices for each of the class labels *not* equal to
+		# the current label and randomly pick an image corresponding
+		# to a label *not* equal to the current label
+		negIdx = np.where(labels != label)[0]
+		negImage = images[np.random.choice(negIdx)]
+
+		# prepare a negative pair of images and update our lists
+		pairImages.append([currentImage, negImage])
+		pairLabels.append([0])
+
+	# return a 2-tuple of our image pairs and labels
+	return (np.array(pairImages), np.array(pairLabels))
+
+
+def euclidean_distance(vectors):
+	# unpack the vectors into separate lists
+	(featsA, featsB) = vectors
+
+	# compute the sum of squared distances between the vectors
+	sumSquared = K.sum(K.square(featsA - featsB), axis=1,
+		keepdims=True)
+
+	# return the euclidean distance between the vectors
+	return K.sqrt(K.maximum(sumSquared, K.epsilon()))
+
+
+def plot_training(H, plotPath):
+	# construct a plot that plots and saves the training history
+	plt.style.use("ggplot")
+	plt.figure()
+	plt.plot(H.history["loss"], label="train_loss")
+	plt.plot(H.history["val_loss"], label="val_loss")
+	plt.plot(H.history["accuracy"], label="train_acc")
+	plt.plot(H.history["val_accuracy"], label="val_acc")
+	plt.title("Training Loss and Accuracy")
+	plt.xlabel("Epoch #")
+	plt.ylabel("Loss/Accuracy")
+	plt.legend(loc="lower left")
+	plt.savefig(plotPath)
+
+
+def build_siamese_model(inputShape, embeddingDim=48):
+    # Although we have two sister networks,
+    # we only need to define one network.
+    # Usually, we'll require a more complex network,
+    # but since we're working with MNIST, we define
+    # this simple architecture:
+    # (Conv2D, MaxPool, Dropout) x 2
+    # Additionally, the feature vector dimension,
+    # embeddingDim = 48
+    
+	# specify the inputs for the feature extractor network
+	inputs = Input(inputShape)
+
+	# define the first set of CONV => RELU => POOL => DROPOUT layers
+	x = Conv2D(64, (2, 2), padding="same", activation="relu")(inputs)
+	x = MaxPooling2D(pool_size=(2, 2))(x)
+	x = Dropout(0.3)(x)
+
+	# second set of CONV => RELU => POOL => DROPOUT layers
+	x = Conv2D(64, (2, 2), padding="same", activation="relu")(x)
+	x = MaxPooling2D(pool_size=2)(x)
+	x = Dropout(0.3)(x)
+
+	# prepare the final outputs
+	pooledOutput = GlobalAveragePooling2D()(x)
+	outputs = Dense(embeddingDim)(pooledOutput)
+
+	# build the model
+	model = Model(inputs, outputs)
+
+	# return the model to the calling function
+	return model
+
+
+# load MNIST dataset and scale the pixel values to the range of [0, 1]
+print("[INFO] loading MNIST dataset...")
+(trainX, trainY), (testX, testY) = mnist.load_data()
+trainX = trainX / 255.0
+testX = testX / 255.0
+
+# add a channel dimension to the images
+trainX = np.expand_dims(trainX, axis=-1)
+testX = np.expand_dims(testX, axis=-1)
+
+# prepare the positive and negative pairs
+print("[INFO] preparing positive and negative pairs...")
+(pairTrain, labelTrain) = make_pairs(trainX, trainY)
+(pairTest, labelTest) = make_pairs(testX, testY)
+
+# configure the siamese network
+print("[INFO] building siamese network...")
+imgA = Input(shape=config.IMG_SHAPE)
+imgB = Input(shape=config.IMG_SHAPE)
+# Now, the next 6 lines are key: although we have 2 sister networks
+# we instantiate only one network!
+# We should understand the network as a feature extractor to which we pass 2 images.
+# The the extracted feature vectors are concatenated
+# and passed to the similarity/distance computation layer/function.
+# 
+featureExtractor = build_siamese_model(config.IMG_SHAPE)
+featsA = featureExtractor(imgA)
+featsB = featureExtractor(imgB)
+
+# finally, construct the siamese network
+distance = Lambda(euclidean_distance)([featsA, featsB])
+outputs = Dense(1, activation="sigmoid")(distance)
+model = Model(inputs=[imgA, imgB], outputs=outputs)
+
+featureExtractor.summary()
+model.summary()
+
+# compile the model
+print("[INFO] compiling model...")
+model.compile(loss="binary_crossentropy", optimizer="adam",
+	metrics=["accuracy"])
+
+# train the model
+print("[INFO] training model...")
+history = model.fit(
+	[pairTrain[:, 0], pairTrain[:, 1]], labelTrain[:],
+	validation_data=([pairTest[:, 0], pairTest[:, 1]], labelTest[:]),
+	batch_size=config.BATCH_SIZE,
+	epochs=config.EPOCHS)
+
+# serialize the model to disk
+print("[INFO] saving siamese model...")
+model.save(config.MODEL_PATH)
+
+# plot the training history
+print("[INFO] plotting training history...")
+plot_training(history, config.PLOT_PATH)
+```
+
+## 4. Comparing Images for Similarity with Siamese Networks (PyImageSearch)
+
+Links:
+
+- Tutorial: [Comparing images for similarity using siamese networks, Keras, and TensorFlow](https://pyimagesearch.com/2020/12/07/comparing-images-for-similarity-using-siamese-networks-keras-and-tensorflow/?_ga=2.36060704.1290695422.1688376799-1020982194.1685524223)
+- [Google Colab Notebook](https://colab.research.google.com/drive/1FLZQmEoQdf7r6c_YoYEYZVAeClwVg149?usp=sharing)
+- [Source code](https://pyimagesearch-code-downloads.s3-us-west-2.amazonaws.com/compare-images-siamese-networks/compare-images-siamese-networks.zip)
+- Local/repo notebook: [`compare_images_siamese_networks.ipynb`](./03_compare-images-siamese-networks/compare_images_siamese_networks.ipynb)
+
+In thi sproject, images from the MNIST dataset are loaded in random pairs and fed to the trained Siamese Network to predict their similarity.
+
+![Comparing MNIST digits with Siamese Networks](./assets/compare_siamese_networks_output.png)
+
+```python
+# import the necessary packages
+from pyimagesearch import config
+from tensorflow.keras.models import load_model
+from imutils.paths import list_images
+import matplotlib.pyplot as plt
+import numpy as np
+import argparse
+import cv2
+
+# # construct the argument parser and parse the arguments
+# ap = argparse.ArgumentParser()
+# ap.add_argument("-i", "--input", required=True,
+# 	help="path to input directory of testing images")
+# args = vars(ap.parse_args())
+
+# since we are using Jupyter Notebooks we can replace our argument
+# parsing code with *hard coded* arguments and values
+args = {
+	"input": "examples"
+}
+
+# grab the test dataset image paths and then randomly generate a
+# total of 10 image pairs
+print("[INFO] loading test dataset...")
+testImagePaths = list(list_images(args["input"]))
+np.random.seed(42)
+pairs = np.random.choice(testImagePaths, size=(10, 2))
+
+# load the model from disk
+print("[INFO] loading siamese model...")
+model = load_model(config.MODEL_PATH)
+
+# loop over all image pairs
+for (i, (pathA, pathB)) in enumerate(pairs):
+	# load both the images and convert them to grayscale
+	imageA = cv2.imread(pathA, 0)
+	imageB = cv2.imread(pathB, 0)
+
+	# create a copy of both the images for visualization purpose
+	origA = imageA.copy()
+	origB = imageB.copy()
+
+	# add channel a dimension to both the images
+	imageA = np.expand_dims(imageA, axis=-1)
+	imageB = np.expand_dims(imageB, axis=-1)
+
+	# add a batch dimension to both images
+	imageA = np.expand_dims(imageA, axis=0)
+	imageB = np.expand_dims(imageB, axis=0)
+
+	# scale the pixel values to the range of [0, 1]
+	imageA = imageA / 255.0
+	imageB = imageB / 255.0
+
+	# use our siamese model to make predictions on the image pair,
+	# indicating whether or not the images belong to the same class
+	preds = model.predict([imageA, imageB])
+	proba = preds[0][0]
+
+	# initialize the figure
+	fig = plt.figure("Pair #{}".format(i + 1), figsize=(4, 2))
+	plt.suptitle("Similarity: {:.2f}".format(proba))
+
+	# show first image
+	ax = fig.add_subplot(1, 2, 1)
+	plt.imshow(origA, cmap=plt.cm.gray)
+	plt.axis("off")
+
+	# show the second image
+	ax = fig.add_subplot(1, 2, 2)
+	plt.imshow(origB, cmap=plt.cm.gray)
+	plt.axis("off")
+
+	# show the plot
+	plt.show()
+```
+
+## 5. Improving Accuracy with Contrastive Loss (PyImageSearch / Tensorflow)
+
+Links:
+
+- Tutorial: [Contrastive Loss for Siamese Networks with Keras and TensorFlow](https://pyimagesearch.com/2021/01/18/contrastive-loss-for-siamese-networks-with-keras-and-tensorflow/?_ga=2.36180640.1290695422.1688376799-1020982194.1685524223)
+- [Google Colab Notebook](https://colab.research.google.com/drive/10zpbE6cMEEzws-fkR_88Cb_X5OsMD1Za?usp=sharing)
+- [Source code](https://pyimagesearch-code-downloads.s3-us-west-2.amazonaws.com/contrastive-loss-keras/contrastive-loss-keras.zip)
+- Local/repo notebook: [`compare_images_siamese_networks.ipynb`](./03_compare-images-siamese-networks/compare_images_siamese_networks.ipynb)
 
