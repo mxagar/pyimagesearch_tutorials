@@ -4,10 +4,20 @@ This folder contains examples related to **Siamese Networks and Contrastive Lear
 
 Most of the examples were obtained from the [PyImageSearch](https://pyimagesearch.com/) website:
 
+Part I: MNIST with Tensorflow / Keras
+
 - Building Image Pairs for Siamese Networks (PyImageSearch / Tensorflow)
 - Implementing Your First Siamese Network with Keras and TensorFlow (PyImageSearch / Tensorflow)
 - Comparing Images for Similarity with Siamese Networks (PyImageSearch / Tensorflow)
-- Improving Accuracy with Contrastive Loss (PyImageSearch / Tensorflow)
+- **Improving Accuracy with Contrastive Loss (PyImageSearch / Tensorflow)**
+
+Part II: X
+
+- A
+- B
+
+Part III: X
+
 - Face Recognition with Siamese Networks, Keras, and TensorFlow (PyImageSearch / Tensorflow)
 - Building a Dataset for Triplet Loss with Keras and TensorFlow (PyImageSearch / Tensorflow)
 - Triplet Loss with Keras and TensorFlow (PyImageSearch / Tensorflow)
@@ -316,7 +326,7 @@ The trained model (weights) is saved to disk. Summary of steps:
 
 - Config dictionary
 - Image pairs are created
-- Euclidean distance function
+- Euclidean distance function: we need to define it as a Keras object so that it's a layer.
 - Siamese network is built:
   - No Sequential API is used, but the Functional API
   - `Lambda(euclidean_distance)` for the feature vectors of the images
@@ -623,5 +633,289 @@ Links:
 - Tutorial: [Contrastive Loss for Siamese Networks with Keras and TensorFlow](https://pyimagesearch.com/2021/01/18/contrastive-loss-for-siamese-networks-with-keras-and-tensorflow/?_ga=2.36180640.1290695422.1688376799-1020982194.1685524223)
 - [Google Colab Notebook](https://colab.research.google.com/drive/10zpbE6cMEEzws-fkR_88Cb_X5OsMD1Za?usp=sharing)
 - [Source code](https://pyimagesearch-code-downloads.s3-us-west-2.amazonaws.com/contrastive-loss-keras/contrastive-loss-keras.zip)
-- Local/repo notebook: [`compare_images_siamese_networks.ipynb`](./03_compare-images-siamese-networks/compare_images_siamese_networks.ipynb)
+- Local/repo notebook: [`contrastive_loss_keras.ipynb`](./04_contrastive-loss-keras/contrastive_loss_keras.ipynb)
 
+This is a **summary tutorial which contains all the previous 3 examples**; additionally, the **contrastive loss** function is implemented, which improves the binary cross entropy loss. In reality, the formula of the contrastive loss is ver similar to the binary cross-entropy:
+
+- Both positive and negative image pairs are considered.
+- The distance `D` or `D_w` is sumtiplied to each term, to scale it with the Euclidean distance between the vectors.
+- We also use a `margin` hyperparameter, which adds an offset to the distance; it is often set to be 1, but we might need to tune it.
+- There is no sigmoid now: the model output is the Euclidean distance itself.
+
+![Binary Cross-Entropy](./assets/contrastive_loss_keras_binary_crossentropy.png)
+
+![Contrastive Loss](./assets/contrastive_loss_keras_constrastive_loss_function_updated.png)
+
+Contrastive loss is usually more robust than binary cross-entropy. Since we have no sigmoid in the output, we need to figure out a threshold to determine whether two images belog to the same class. We can evaluate that threshold experimentally by observing the distribution of the positive and negative pairs, i.e., the distribution of their Euclidean distances. Something similar is done with anomaly detection.
+
+```python
+# import the necessary packages
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input
+from tensorflow.keras.layers import Conv2D
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Dropout
+from tensorflow.keras.layers import GlobalAveragePooling2D
+from tensorflow.keras.layers import MaxPooling2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Input
+from tensorflow.keras.layers import Lambda
+from tensorflow.keras.datasets import mnist
+from tensorflow.keras.models import load_model
+from imutils.paths import list_images
+import tensorflow.keras.backend as K
+import matplotlib.pyplot as plt
+import tensorflow as tf
+import numpy as np
+import cv2
+import os
+
+class config:
+    # specify the shape of the inputs for our network
+    IMG_SHAPE = (28, 28, 1)
+
+    # specify the batch size and number of epochs
+    BATCH_SIZE = 64
+
+    # Usually, we need 100s of epochs
+    # with Siamese Networks
+    EPOCHS = 5 #100
+
+    # define the path to the base output directory
+    BASE_OUTPUT = "output"
+
+    # use the base output path to derive the path to the serialized
+    # model along with training history plot
+    MODEL_PATH = os.path.sep.join([BASE_OUTPUT,
+        "contrastive_siamese_model"])
+    PLOT_PATH = os.path.sep.join([BASE_OUTPUT,
+        "contrastive_plot.png"])
+
+def make_pairs(images, labels):
+	# initialize two empty lists to hold the (image, image) pairs and
+	# labels to indicate if a pair is positive or negative
+	pairImages = []
+	pairLabels = []
+
+	# calculate the total number of classes present in the dataset
+	# and then build a list of indexes for each class label that
+	# provides the indexes for all examples with a given label
+	numClasses = len(np.unique(labels))
+	idx = [np.where(labels == i)[0] for i in range(0, numClasses)]
+
+	# loop over all images
+	for idxA in range(len(images)):
+		# grab the current image and label belonging to the current
+		# iteration
+		currentImage = images[idxA]
+		label = labels[idxA]
+
+		# randomly pick an image that belongs to the *same* class
+		# label
+		idxB = np.random.choice(idx[label])
+		posImage = images[idxB]
+
+		# prepare a positive pair and update the images and labels
+		# lists, respectively
+		pairImages.append([currentImage, posImage])
+		pairLabels.append([1])
+
+		# grab the indices for each of the class labels *not* equal to
+		# the current label and randomly pick an image corresponding
+		# to a label *not* equal to the current label
+		negIdx = np.where(labels != label)[0]
+		negImage = images[np.random.choice(negIdx)]
+
+		# prepare a negative pair of images and update our lists
+		pairImages.append([currentImage, negImage])
+		pairLabels.append([0])
+
+	# return a 2-tuple of our image pairs and labels
+	return (np.array(pairImages), np.array(pairLabels))
+
+
+def euclidean_distance(vectors):
+	# unpack the vectors into separate lists
+	(featsA, featsB) = vectors
+
+	# compute the sum of squared distances between the vectors
+	sumSquared = K.sum(K.square(featsA - featsB), axis=1,
+		keepdims=True)
+
+	# return the euclidean distance between the vectors
+	return K.sqrt(K.maximum(sumSquared, K.epsilon()))
+
+
+def plot_training(H, plotPath):
+	# construct a plot that plots and saves the training history
+	plt.style.use("ggplot")
+	plt.figure()
+	plt.plot(H.history["loss"], label="train_loss")
+	plt.plot(H.history["val_loss"], label="val_loss")
+	plt.title("Training Loss")
+	plt.xlabel("Epoch #")
+	plt.ylabel("Loss")
+	plt.legend(loc="lower left")
+	plt.savefig(plotPath)
+
+
+def build_siamese_model(inputShape, embeddingDim=48):
+	# specify the inputs for the feature extractor network
+	inputs = Input(inputShape)
+
+	# define the first set of CONV => RELU => POOL => DROPOUT layers
+	x = Conv2D(64, (2, 2), padding="same", activation="relu")(inputs)
+	x = MaxPooling2D(pool_size=(2, 2))(x)
+	x = Dropout(0.3)(x)
+
+	# second set of CONV => RELU => POOL => DROPOUT layers
+	x = Conv2D(64, (2, 2), padding="same", activation="relu")(x)
+	x = MaxPooling2D(pool_size=2)(x)
+	x = Dropout(0.3)(x)
+
+	# prepare the final outputs
+	pooledOutput = GlobalAveragePooling2D()(x)
+	outputs = Dense(embeddingDim)(pooledOutput)
+
+	# build the model
+	model = Model(inputs, outputs)
+
+	# return the model to the calling function
+	return model
+
+
+def contrastive_loss(y, preds, margin=1):
+	# explicitly cast the true class label data type to the predicted
+	# class label data type (otherwise we run the risk of having two
+	# separate data types, causing TensorFlow to error out)
+	y = tf.cast(y, preds.dtype)
+
+	# calculate the contrastive loss between the true labels and
+	# the predicted labels
+	squaredPreds = K.square(preds)
+	squaredMargin = K.square(K.maximum(margin - preds, 0))
+	loss = K.mean(y * squaredPreds + (1 - y) * squaredMargin)
+
+	# return the computed contrastive loss to the calling function
+	return loss
+
+
+# load MNIST dataset and scale the pixel values to the range of [0, 1]
+print("[INFO] loading MNIST dataset...")
+(trainX, trainY), (testX, testY) = mnist.load_data()
+trainX = trainX / 255.0
+testX = testX / 255.0
+
+# add a channel dimension to the images
+trainX = np.expand_dims(trainX, axis=-1)
+testX = np.expand_dims(testX, axis=-1)
+
+# prepare the positive and negative pairs
+print("[INFO] preparing positive and negative pairs...")
+(pairTrain, labelTrain) = make_pairs(trainX, trainY)
+(pairTest, labelTest) = make_pairs(testX, testY)
+
+
+# configure the siamese network
+print("[INFO] building siamese network...")
+imgA = Input(shape=config.IMG_SHAPE)
+imgB = Input(shape=config.IMG_SHAPE)
+featureExtractor = build_siamese_model(config.IMG_SHAPE)
+featsA = featureExtractor(imgA)
+featsB = featureExtractor(imgB)
+
+# finally, construct the siamese network
+distance = Lambda(euclidean_distance)([featsA, featsB])
+model = Model(inputs=[imgA, imgB], outputs=distance)
+
+
+# compile the model
+print("[INFO] compiling model...")
+model.compile(loss=contrastive_loss, optimizer="adam")
+
+# train the model
+print("[INFO] training model...")
+history = model.fit(
+	[pairTrain[:, 0], pairTrain[:, 1]], labelTrain[:],
+	validation_data=([pairTest[:, 0], pairTest[:, 1]], labelTest[:]),
+	batch_size=config.BATCH_SIZE,
+	epochs=config.EPOCHS)
+
+# serialize the model to disk
+print("[INFO] saving siamese model...")
+model.save(config.MODEL_PATH)
+
+# plot the training history
+print("[INFO] plotting training history...")
+plot_training(history, config.PLOT_PATH)
+
+
+# # construct the argument parser and parse the arguments
+# ap = argparse.ArgumentParser()
+# ap.add_argument("-i", "--input", required=True,
+# 	help="path to input directory of testing images")
+# args = vars(ap.parse_args())
+
+# since we are using Jupyter Notebooks we can replace our argument
+# parsing code with *hard coded* arguments and values
+args = {
+    "input": "examples"
+}
+
+# grab the test dataset image paths and then randomly generate a
+# total of 10 image pairs
+print("[INFO] loading test dataset...")
+testImagePaths = list(list_images(args["input"]))
+np.random.seed(42)
+pairs = np.random.choice(testImagePaths, size=(10, 2))
+
+# load the model from disk
+print("[INFO] loading siamese model...")
+model = load_model(config.MODEL_PATH, compile=False)
+
+# loop over all image pairs
+for (i, (pathA, pathB)) in enumerate(pairs):
+	# load both the images and convert them to grayscale
+	imageA = cv2.imread(pathA, 0)
+	imageB = cv2.imread(pathB, 0)
+
+	# create a copy of both the images for visualization purpose
+	origA = imageA.copy()
+	origB = imageB.copy()
+
+	# add channel a dimension to both the images
+	imageA = np.expand_dims(imageA, axis=-1)
+	imageB = np.expand_dims(imageB, axis=-1)
+
+	# add a batch dimension to both images
+	imageA = np.expand_dims(imageA, axis=0)
+	imageB = np.expand_dims(imageB, axis=0)
+
+	# scale the pixel values to the range of [0, 1]
+	imageA = imageA / 255.0
+	imageB = imageB / 255.0
+
+	# use our siamese model to make predictions on the image pair,
+	# indicating whether or not the images belong to the same class
+	preds = model.predict([imageA, imageB])
+	proba = preds[0][0]
+
+	# initialize the figure
+	fig = plt.figure("Pair #{}".format(i + 1), figsize=(4, 2))
+	plt.suptitle("Distance: {:.2f}".format(proba))
+
+	# show first image
+	ax = fig.add_subplot(1, 2, 1)
+	plt.imshow(origA, cmap=plt.cm.gray)
+	plt.axis("off")
+
+	# show the second image
+	ax = fig.add_subplot(1, 2, 2)
+	plt.imshow(origB, cmap=plt.cm.gray)
+	plt.axis("off")
+
+	# show the plot
+	plt.show()
+
+```
