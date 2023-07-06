@@ -42,6 +42,7 @@ Table of contents:
 	- [7. Building a Dataset for Triplet Loss with Keras and TensorFlow (PyImageSearch / Tensorflow)](#7-building-a-dataset-for-triplet-loss-with-keras-and-tensorflow-pyimagesearch--tensorflow)
 	- [8. Triplet Loss and Model Definition with Keras and TensorFlow (PyImageSearch / Tensorflow)](#8-triplet-loss-and-model-definition-with-keras-and-tensorflow-pyimagesearch--tensorflow)
 	- [9. Training and Making Predictions with Siamese Networks and Triplet Loss (PyImageSearch / Tensorflow)](#9-training-and-making-predictions-with-siamese-networks-and-triplet-loss-pyimagesearch--tensorflow)
+	- [10. Siamese Networks for MNIST with Pytorch](#10-siamese-networks-for-mnist-with-pytorch)
 
 
 ## 0. Set Up: Environment, GPU, etc.
@@ -1902,4 +1903,189 @@ if not os.path.exists(config.OUTPUT_PATH):
 outputImagePath = config.OUTPUT_IMAGE_PATH
 print(f"[INFO] saving the inference image to {outputImagePath}...")
 plt.savefig(fname=outputImagePath)
+```
+
+## 10. Siamese Networks for MNIST with Pytorch
+
+This section, basically ports the project from [section 5](#5-improving-accuracy-with-contrastive-loss-pyimagesearch--tensorflow) to Pytorch.
+
+I built this project pair-programming with ChatGPT; the first solutions from ChatGPT are not that good, but using the field knowledge, one can obtainnice results faster as alone.
+
+The steps:
+
+- A
+- B
+
+I trained the model on my GPU: NVIDIA RTX 3060.
+
+Here is the entire code, which is already wuite modularized.
+
+```python
+import os
+import time
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve
+
+import torch
+import torchvision
+from torch import nn
+import torch.nn.functional as F
+from torch.optim import Adam
+from torch.utils.data import DataLoader, Dataset
+from torchvision import datasets, transforms, models
+from torch.optim.lr_scheduler import StepLR
+
+# Configuration class
+class Config:
+    def __init__(self):
+        # Hyperparameters
+        self.learning_rate = 0.001
+        self.num_epochs = 10
+        self.batch_size = 64
+        self.patience = 5  # For early stopping
+        self.dropout_p = 0.5
+        self.embedding_size = 128  # Size of the embedding/feature vectors
+        self.scheduler_step_size = 10  # Step size for the learning rate scheduler
+        self.scheduler_gamma = 0.1  # Gamma for the learning rate scheduler: every step_size lr is multiplied by gamma
+        self.img_shape = (28, 28)  # Not used in this application
+        # Other application variables
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.base_path = "./output"
+        os.makedirs(self.base_path, exist_ok=True)  # Create the base_path directory if it doesn't exist
+        self.model_path = os.path.join(self.base_path, "best_model.pth")
+        self.learning_plot_path = os.path.join(self.base_path, "learning_curves.png")
+        self.threshold_plot_path = os.path.join(self.base_path, "threshold_histogram.png")
+
+# Dataset generator class
+class PairDataset(Dataset):
+    def __init__(self, mnist_dataset):
+        self.mnist_dataset = mnist_dataset
+        self.transform = transforms.ToTensor()
+
+    def __getitem__(self, index):
+        img1, label1 = self.mnist_dataset[index]
+        index2 = torch.randint(len(self.mnist_dataset), size=(1,)).item()
+        img2, label2 = self.mnist_dataset[index2]
+        return img1, img2, torch.tensor(int(label1 == label2), dtype=torch.float32)
+
+    def __len__(self):
+        return len(self.mnist_dataset)
+
+# Siamese Network
+class SiameseNetwork(nn.Module):
+    def __init__(self, embedding_size=128, dropout_p=0.3):
+        super(SiameseNetwork, self).__init__()
+        self.backbone = models.resnet18(pretrained=True)
+        self.embedding_size = embedding_size
+        self.dropout_p = dropout_p
+
+        # Remove the fully connected layer
+        self.backbone = nn.Sequential(*list(self.backbone.children())[:-1])
+
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+
+        self.head = nn.Sequential(
+            #nn.Linear(self.backbone[-1].out_features, 512),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Dropout(self.dropout_p),
+            nn.Linear(256, self.embedding_size)
+        )
+
+    def forward_one(self, x):
+        x = self.backbone(x)
+        x = x.view(x.size()[0], -1)
+        x = self.head(x)
+        return x
+
+    def forward(self, input1, input2):
+        output1 = self.forward_one(input1)
+        output2 = self.forward_one(input2)
+        return output1, output2
+
+# Contrastive loss
+class ContrastiveLoss(nn.Module):
+    def __init__(self, margin=1.0):
+        super(ContrastiveLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, output1, output2, label):
+        # pairwise_distance(): equivalent to euclidean_distance:
+        # torch.sqrt(((output1 - output2) ** 2).sum(dim=1))
+        euclidean_distance = F.pairwise_distance(output1, output2)
+        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
+                                      (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
+        return loss_contrastive
+
+# Save model function
+def save_model(model, save_path):
+    torch.save(model.state_dict(), save_path)
+
+# Load model function
+def load_model(model, load_path):
+    model.load_state_dict(torch.load(load_path, map_location=model.device))
+    return model
+        
+# Training function
+def train(model, train_loader, val_loader, criterion, optimizer, scheduler, config):
+    model.train()
+    train_loss_history = []
+    val_loss_history = []
+    best_val_loss = float('inf')
+    no_improve_epochs = 0
+    for epoch in range(config.num_epochs):
+        start_time = time.time()
+        train_loss = 0
+        for i, (img1, img2, labels) in enumerate(train_loader):
+            img1, img2, labels = img1.to(config.device), img2.to(config.device), labels.to(config.device)
+            output1, output2 = model(img1, img2)
+            loss = criterion(output1, output2, labels)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+
+            # Print training loss every 100 batches
+            if i % 100 == 0:
+                print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss: {loss.item()}")
+
+        scheduler.step()
+        train_loss_history.append(train_loss / len(train_loader))
+
+        val_loss = validate(model, val_loader, criterion, config)
+        val_loss_history.append(val_loss)
+        end_time = time.time()
+        epoch_time = end_time - start_time
+
+        print(f"Epoch: {epoch+1}, Loss: {train_loss_history[-1]}, Val Loss: {val_loss}, Time: {epoch_time}s, Learning Rate: {scheduler.get_last_lr()[0]}")
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            save_model(model, config.model_path)
+            no_improve_epochs = 0
+        else:
+            no_improve_epochs += 1
+            if no_improve_epochs >= config.patience:
+                print("Early stopping")
+                break
+
+    return train_loss_history, val_loss_history
+
+
+# Validation function
+def validate(model, val_loader, criterion, config):
+    model.eval()
+    total_loss = 0
+    with torch.no_grad():
+        for i, (img1, img2, labels) in enumerate(val_loader):
+            img1, img2, labels = img1.to(config.device), img2.to(config.device), labels.to(config.device)
+            output1, output2 = model(img1, img2)
+            loss = criterion(output1, output2, labels)
+            total_loss += loss.item()
+    return total_loss / len(val_loader)
+
+###############
 ```
