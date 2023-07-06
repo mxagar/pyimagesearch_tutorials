@@ -2,5 +2,4 @@ face_crop_model
 train_dataset
 cropped_train_dataset
 cropped_test_dataset
-output/variables
-output/*.pb
+output/siemese_network
