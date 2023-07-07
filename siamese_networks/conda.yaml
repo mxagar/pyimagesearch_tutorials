@@ -26,6 +26,7 @@ dependencies:
       #- onnxruntime
       - onnxruntime-gpu
       - onnx-simplifier>=0.3.6
+      - optuna
       - tensorflow
       - keras
       - wandb
