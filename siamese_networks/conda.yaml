@@ -22,12 +22,14 @@ dependencies:
       - protobuf
       - opencv-python
       - opencv-contrib-python
+      - scikit-image
       - onnx>=1.9.0
       #- onnxruntime
       - onnxruntime-gpu
       - onnx-simplifier>=0.3.6
       - optuna
       - tensorflow
+      - tensorboard
       - keras
       - wandb
       - autopep8
