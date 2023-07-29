@@ -31,6 +31,8 @@ dependencies:
       - tensorflow
       - tensorboard
       - keras
+      - python-dotenv
+      - psycopg2-binary
       - wandb
       - autopep8
       - joblib
