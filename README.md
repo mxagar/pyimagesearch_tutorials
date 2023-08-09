@@ -19,9 +19,7 @@ In addition to these tutorials, I have the following repositories with related c
 
 <!--Page 3-->
 
-:construction:
-
-TBD.
+Folder: [`siamese_networks/`](./siamese_networks/).
 
 - Building Image Pairs for Siamese Networks
 - Implementing Your First Siamese Network with Keras and TensorFlow
@@ -31,6 +29,19 @@ TBD.
 - Building a Dataset for Triplet Loss with Keras and TensorFlow
 - Triplet Loss with Keras and TensorFlow
 - Training and Making Predictions with Siamese Networks and Triplet Loss
+
+### NeRFs
+
+<!--Page 2-->
+
+:construction:
+
+TBD.
+
+- Computer Graphics and Deep Learning with NeRF using TensorFlow and Keras: Part 1
+- Computer Graphics and Deep Learning with NeRF using TensorFlow and Keras: Part 2
+- Computer Graphics and Deep Learning with NeRF using TensorFlow and Keras: Part 3
+
 
 ### Data Pipelines
 
@@ -56,18 +67,6 @@ TBD.
 - Hyperparameter Tuning for Computer Vision Projects 
 - Using scikit-learn to Tune Deep Learning Model Hyperparameters
 - Easy Hyperparameter Tuning with Keras Tuner
-
-### NeRFs
-
-<!--Page 2-->
-
-:construction:
-
-TBD.
-
-- Computer Graphics and Deep Learning with NeRF using TensorFlow and Keras: Part 1
-- Computer Graphics and Deep Learning with NeRF using TensorFlow and Keras: Part 2
-- Computer Graphics and Deep Learning with NeRF using TensorFlow and Keras: Part 3
 
 ### Vision Fusion
 
